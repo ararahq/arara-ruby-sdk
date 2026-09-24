@@ -1,11 +1,15 @@
 require_relative "base_resource"
+require_relative "../page"
 
 module Arara
   module Resources
     class Wallet < BaseResource
-      # List wallet transactions. GET /v1/wallet/transactions
-      def transactions(page: 0, size: 20)
-        @http.get("/v1/wallet/transactions", params: { "page" => page, "size" => size })
+      DEFAULT_PAGE_SIZE = 20
+
+      # List wallet transactions. GET /v1/wallet/transactions. Returns an Arara::Page.
+      def transactions(page: 0, size: DEFAULT_PAGE_SIZE)
+        response = @http.get("/v1/wallet/transactions", params: { "page" => page, "size" => size })
+        Arara::Page.from_content(response, page: page, size: size)
       end
 
       # Get auto-recharge settings. GET /v1/wallet/auto-recharge

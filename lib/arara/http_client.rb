@@ -1,6 +1,7 @@
 require "net/http"
 require "uri"
 require "json"
+require "time"
 require_relative "errors"
 
 module Arara
@@ -10,6 +11,7 @@ module Arara
     MAX_RETRY_DELAY = 30.0
     RATE_LIMIT_STATUS = 429
     SERVER_ERROR_THRESHOLD = 500
+    IDEMPOTENT_METHODS = %i[get put delete].freeze
 
     def initialize(api_key:, base_url:, timeout: 10, max_retries: DEFAULT_MAX_RETRIES)
       @api_key = api_key
@@ -47,14 +49,14 @@ module Arara
         status = response.code.to_i
         return handle_success(response) if status < 400
 
-        if retryable?(status) && attempt < @max_retries
+        if retry_allowed?(method, idempotency_key) && retryable?(status) && attempt < @max_retries
           sleep(retry_delay(attempt, response))
           attempt += 1
           next
         end
         raise error_from_response(status, response)
       rescue Timeout::Error, IOError, SystemCallError, Net::OpenTimeout, Net::ReadTimeout => e
-        raise NetworkError.new(e.message) if attempt >= @max_retries
+        raise NetworkError.new(e.message) if attempt >= @max_retries || !retry_allowed?(method, idempotency_key)
 
         sleep(retry_delay(attempt, nil))
         attempt += 1
@@ -111,6 +113,10 @@ module Arara
       raise Error.new("Failed to parse Arara API response as JSON")
     end
 
+    def retry_allowed?(method, idempotency_key)
+      IDEMPOTENT_METHODS.include?(method) || !idempotency_key.nil?
+    end
+
     def retryable?(status)
       status == RATE_LIMIT_STATUS || status >= SERVER_ERROR_THRESHOLD
     end
@@ -130,7 +136,7 @@ module Arara
 
       begin
         [(Time.httpdate(header) - Time.now).ceil, 0].max
-      rescue ArgumentError
+      rescue ArgumentError, TypeError
         nil
       end
     end
