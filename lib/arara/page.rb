@@ -7,10 +7,10 @@ module Arara
     attr_reader :data, :pagination, :raw
 
     def self.from_data(response)
-      body = response.is_a?(Hash) ? response : {}
+      body = require_list(response, "data")
       meta = body["pagination"].is_a?(Hash) ? body["pagination"] : {}
       new(
-        data: Array(body["data"]),
+        data: body["data"],
         pagination: Pagination.new(
           page: meta["page"], size: meta["size"],
           total_elements: meta["totalElements"], total_pages: meta["totalPages"]
@@ -20,9 +20,9 @@ module Arara
     end
 
     def self.from_content(response, page:, size:)
-      body = response.is_a?(Hash) ? response : {}
+      body = require_list(response, "content")
       new(
-        data: Array(body["content"]),
+        data: body["content"],
         pagination: Pagination.new(
           page: page, size: size,
           total_elements: body["totalElements"], total_pages: body["totalPages"]
@@ -30,6 +30,13 @@ module Arara
         raw: response
       )
     end
+
+    def self.require_list(response, field)
+      return response if response.is_a?(Hash) && response[field].is_a?(Array)
+
+      raise Arara::Error.new("Unexpected paginated response from Arara API: missing \"#{field}\" list")
+    end
+    private_class_method :require_list
 
     def initialize(data:, pagination:, raw: nil)
       @data = data

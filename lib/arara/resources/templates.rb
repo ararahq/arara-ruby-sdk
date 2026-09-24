@@ -14,9 +14,17 @@ module Arara
         Arara::Page.from_data(response)
       end
 
-      # Find a template by exact name, filtering the list locally. Returns nil when absent.
+      # Find a template by exact name, walking every page of the filtered list. Returns nil when absent.
       def find_by_name(name)
-        list(name: name).find { |template| template["name"] == name }
+        page_number = 0
+        loop do
+          page = list(name: name, page: page_number)
+          match = page.find { |template| template["name"] == name }
+          return match if match
+          return nil unless page.next_page?
+
+          page_number += 1
+        end
       end
 
       # Create a template for Meta approval. POST /v1/templates

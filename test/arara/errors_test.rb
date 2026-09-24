@@ -36,6 +36,7 @@ class ErrorsTest < Minitest::Test
     error = raise_for(403, { "status" => 403, "error" => "Forbidden", "message" => "API Key permission insufficient" })
     assert_instance_of Arara::AuthenticationError, error
     assert_nil error.code
+    assert_equal "API Key permission insufficient", error.message
   end
 
   def test_should_raise_authentication_error_for_403_with_empty_body

@@ -33,7 +33,7 @@ module Arara
         raise ArgumentError, "unknown message fields: #{unknown.join(', ')}" unless unknown.empty?
 
         payload = build_payload(fields.merge(receiver: receiver))
-        @http.post(BASE_PATH, body: payload, idempotency_key: idempotency_key || SecureRandom.uuid)
+        @http.post(BASE_PATH, body: payload, idempotency_key: idempotency_key_or_generate(idempotency_key))
       end
 
       alias deliver send_message
@@ -44,7 +44,7 @@ module Arara
         raise ArgumentError, "messages must have at most #{MAX_BATCH_SIZE} items" if messages.size > MAX_BATCH_SIZE
 
         payload = { "templateName" => template_name, "messages" => messages }
-        @http.post("#{BASE_PATH}/batch", body: payload, idempotency_key: idempotency_key || SecureRandom.uuid)
+        @http.post("#{BASE_PATH}/batch", body: payload, idempotency_key: idempotency_key_or_generate(idempotency_key))
       end
 
       # Get a message by id. GET /v1/messages/{id}

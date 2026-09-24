@@ -9,7 +9,7 @@ module Arara
 
       # Create a campaign. POST /v1/campaigns
       def create(payload, idempotency_key: nil)
-        key = idempotency_key || SecureRandom.uuid
+        key = idempotency_key_or_generate(idempotency_key)
         @http.post("/v1/campaigns", body: payload, idempotency_key: key)
       end
 

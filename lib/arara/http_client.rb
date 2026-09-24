@@ -15,7 +15,7 @@ module Arara
 
     def initialize(api_key:, base_url:, timeout: 10, max_retries: DEFAULT_MAX_RETRIES)
       @api_key = api_key
-      @base_uri = URI.parse(base_url)
+      @base_uri = URI.parse(base_url.to_s.sub(%r{/+\z}, ""))
       @timeout = timeout
       @max_retries = max_retries
     end
@@ -43,6 +43,7 @@ module Arara
     private
 
     def request(method, path, body: nil, params: nil, idempotency_key: nil)
+      idempotency_key = normalize_idempotency_key(idempotency_key)
       attempt = 0
       loop do
         response = perform(method, path, body, params, idempotency_key)
@@ -113,6 +114,11 @@ module Arara
       raise Error.new("Failed to parse Arara API response as JSON")
     end
 
+    def normalize_idempotency_key(key)
+      normalized = key.to_s.strip
+      normalized.empty? ? nil : normalized
+    end
+
     def retry_allowed?(method, idempotency_key)
       IDEMPOTENT_METHODS.include?(method) || !idempotency_key.nil?
     end
@@ -157,7 +163,10 @@ module Arara
       return {} if raw.nil? || raw.strip.empty?
 
       parsed = JSON.parse(raw)
-      inner = parsed.is_a?(Hash) ? parsed["error"] : nil
+      return {} unless parsed.is_a?(Hash)
+
+      inner = parsed["error"]
+      return spring_error(parsed) if inner.is_a?(String)
       return {} unless inner.is_a?(Hash)
 
       {
@@ -167,6 +176,11 @@ module Arara
       }
     rescue JSON::ParserError
       {}
+    end
+
+    def spring_error(parsed)
+      message = parsed["message"]
+      { message: message.is_a?(String) && !message.strip.empty? ? message : nil }
     end
   end
 end

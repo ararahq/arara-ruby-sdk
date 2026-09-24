@@ -110,6 +110,53 @@ class HttpClientTest < Minitest::Test
     end
   end
 
+  def test_should_generate_key_and_retry_when_caller_key_is_blank
+    ["", "   "].each do |blank|
+      responses = [FakeResponse.new(503), FakeResponse.new(202, {})]
+      with_client(responses) do |client, transport|
+        client.messages.send_message(receiver: "5511999998888", body: "oi", idempotency_key: blank)
+        keys = transport.requests.map { |request| request["Idempotency-Key"] }
+
+        assert_equal 2, keys.size
+        assert_match(/\A\h{8}-/, keys.first)
+        assert_equal keys.first, keys.last
+      end
+    end
+  end
+
+  def test_should_generate_campaign_key_when_blank
+    with_client([FakeResponse.new(201, {})]) do |client, transport|
+      client.campaigns.create({ "name" => "n" }, idempotency_key: " ")
+      assert_match(/\A\h{8}-/, transport.requests.first["Idempotency-Key"])
+    end
+  end
+
+  def test_should_strip_caller_key
+    with_client([FakeResponse.new(202, {})]) do |client, transport|
+      client.messages.send_message(receiver: "5511999998888", body: "oi", idempotency_key: " order-1 ")
+      assert_equal "order-1", transport.requests.first["Idempotency-Key"]
+    end
+  end
+
+  def test_should_not_retry_post_with_blank_key_at_http_layer
+    http = Arara::HttpClient.new(api_key: "k", base_url: "https://api.test")
+    transport = FakeTransport.new([FakeResponse.new(503), FakeResponse.new(200, {})])
+    Net::HTTP.stub(:new, transport) do
+      http.stub(:sleep, nil) do
+        assert_raises(Arara::ServerError) { http.post("/v1/x", body: {}, idempotency_key: "  ") }
+      end
+    end
+    assert_equal 1, transport.requests.size
+    assert_nil transport.requests.first["Idempotency-Key"]
+  end
+
+  def test_should_not_double_slash_when_base_url_has_trailing_slash
+    transport = FakeTransport.new([FakeResponse.new(200, {})])
+    client = Arara::Client.new(api_key: "k", base_url: "https://api.test/")
+    Net::HTTP.stub(:new, transport) { client.auth.me }
+    assert_equal "/auth/me", transport.requests.first.path
+  end
+
   def test_should_require_api_key
     assert_raises(ArgumentError) { Arara::Client.new(api_key: " ") }
   end

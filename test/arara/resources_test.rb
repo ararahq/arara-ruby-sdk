@@ -108,9 +108,30 @@ class ResourcesTest < Minitest::Test
   def test_should_find_template_by_name_locally
     body = { "data" => [{ "id" => "1", "name" => "boas_vindas_2" }, { "id" => "2", "name" => "boas_vindas" }],
              "pagination" => PAGINATION }
-    with_client([FakeResponse.new(200, body), FakeResponse.new(200, { "data" => [] })]) do |client, _transport|
+    empty = { "data" => [], "pagination" => { "page" => 0, "size" => 50, "totalElements" => 0, "totalPages" => 0 } }
+    with_client([FakeResponse.new(200, body), FakeResponse.new(200, empty)]) do |client, _transport|
       assert_equal "2", client.templates.find_by_name("boas_vindas")["id"]
       assert_nil client.templates.find_by_name("nada")
+    end
+  end
+
+  def test_should_find_template_by_name_on_a_later_page
+    first = { "data" => [{ "id" => "1", "name" => "promo_2" }],
+              "pagination" => { "page" => 0, "size" => 50, "totalElements" => 51, "totalPages" => 2 } }
+    second = { "data" => [{ "id" => "9", "name" => "promo" }],
+               "pagination" => { "page" => 1, "size" => 50, "totalElements" => 51, "totalPages" => 2 } }
+    with_client([FakeResponse.new(200, first), FakeResponse.new(200, second)]) do |client, transport|
+      assert_equal "9", client.templates.find_by_name("promo")["id"]
+      assert_equal "/v1/templates?name=promo&page=1&size=50", transport.requests.last.path
+    end
+  end
+
+  def test_should_return_nil_after_last_page_without_match
+    last = { "data" => [{ "id" => "1", "name" => "promo_2" }],
+             "pagination" => { "page" => 0, "size" => 50, "totalElements" => 1, "totalPages" => 1 } }
+    with_client([FakeResponse.new(200, last)]) do |client, transport|
+      assert_nil client.templates.find_by_name("promo")
+      assert_equal 1, transport.requests.size
     end
   end
 
@@ -127,8 +148,11 @@ class ResourcesTest < Minitest::Test
 
   def test_should_return_content_page_for_campaigns_and_wallet
     body = { "content" => [{ "id" => "c" }], "totalElements" => 1, "totalPages" => 1 }
-    with_client([FakeResponse.new(200, body), FakeResponse.new(200, body)]) do |client, _transport|
-      [client.campaigns.list(page: 0, size: 20), client.wallet.transactions(page: 0, size: 20)].each do |page|
+    with_client([FakeResponse.new(200, body), FakeResponse.new(200, body)]) do |client, transport|
+      pages = [client.campaigns.list(page: 0, size: 20), client.wallet.transactions(page: 0, size: 20)]
+      paths = transport.requests.map { |request| "#{request.method} #{request.path}" }
+      assert_equal ["GET /v1/campaigns?page=0&size=20", "GET /v1/wallet/transactions?page=0&size=20"], paths
+      pages.each do |page|
         assert_equal [{ "id" => "c" }], page.data
         assert_equal 0, page.pagination.page
         assert_equal 20, page.pagination.size
@@ -138,10 +162,17 @@ class ResourcesTest < Minitest::Test
     end
   end
 
-  def test_page_tolerates_unexpected_shape
-    page = Arara::Page.from_data(nil)
-    assert_empty page.data
-    refute page.next_page?
+  def test_page_raises_on_unexpected_shape
+    assert_raises(Arara::Error) { Arara::Page.from_data(nil) }
+    assert_raises(Arara::Error) { Arara::Page.from_data({ "content" => [] }) }
+    assert_raises(Arara::Error) { Arara::Page.from_content([], page: 0, size: 20) }
+    assert_raises(Arara::Error) { Arara::Page.from_content({ "data" => [] }, page: 0, size: 20) }
+  end
+
+  def test_list_raises_when_api_returns_unexpected_shape
+    with_client([FakeResponse.new(200, [])]) do |client, _transport|
+      assert_raises(Arara::Error) { client.smart_links.list }
+    end
   end
 
   def test_should_create_campaign_with_generated_key
