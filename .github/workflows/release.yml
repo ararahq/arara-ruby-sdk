@@ -34,12 +34,19 @@ jobs:
           version=$(ruby -Ilib -e 'require "arara/version"; print Arara::VERSION')
           echo "version=$version" >> "$GITHUB_OUTPUT"
           status=$(curl -s -o /dev/null -w '%{http_code}' "https://rubygems.org/api/v2/rubygems/ararahq/versions/$version.json")
-          if [ "$status" = "200" ]; then
-            echo "publish=false" >> "$GITHUB_OUTPUT"
-            echo "ararahq $version already on rubygems.org, skipping."
-          else
-            echo "publish=true" >> "$GITHUB_OUTPUT"
-          fi
+          case "$status" in
+            200)
+              echo "publish=false" >> "$GITHUB_OUTPUT"
+              echo "ararahq $version already on rubygems.org, skipping."
+              ;;
+            404)
+              echo "publish=true" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "Unexpected status $status from rubygems.org; refusing to decide." >&2
+              exit 1
+              ;;
+          esac
       - name: Publish to RubyGems (Trusted Publishing)
         if: steps.version.outputs.publish == 'true'
         uses: rubygems/release-gem@v1
