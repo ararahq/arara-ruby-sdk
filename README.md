@@ -1,6 +1,6 @@
 # AraraHQ Ruby SDK
 
-Official Ruby client for the [AraraHQ](https://ararahq.com) WhatsApp API. Zero runtime dependencies — pure Ruby stdlib (`net/http`, `json`, `uri`).
+Official Ruby client for the [AraraHQ](https://ararahq.com) WhatsApp API. Zero runtime dependencies: pure Ruby stdlib (`net/http`, `json`, `uri`, `time`, `securerandom`). Ruby >= 3.0.
 
 ## Install
 
@@ -19,19 +19,35 @@ require "arara"
 
 client = Arara::Client.new(api_key: "ara_live_...")
 
-# Send a template message
-result = client.messages.send(
-  receiver: "5511999998888",
+# Send a template message. `deliver` is an alias of `send_message`.
+result = client.messages.send_message(
+  receiver: "5511999998888",          # also accepts "+55..." and "whatsapp:+55..."
+  sender: "+5511888887777",           # optional: which of your numbers sends it
   template_name: "boas_vindas",
   template_variables: ["Micael"],
-  idempotency_key: "order-1234"
+  idempotency_key: "order-1234"       # optional: generated when omitted
 )
 puts result["id"]
 
-# List contacts
-client.contacts.list(page: 0, size: 20, lifecycle: "ENGAGED")
+client.messages.get(result["id"])
 
-# Create a campaign (idempotency key is auto-generated when omitted)
+# Up to 1000 receivers of the same template
+client.messages.send_batch(
+  template_name: "boas_vindas",
+  messages: [{ "receiver" => "5511999998888", "variables" => ["Ana"] }]
+)
+
+# Paginated lists return Arara::Page (Enumerable over `data`)
+page = client.templates.list(status: "APPROVED", page: 0, size: 50)
+page.each { |template| puts template["id"] }
+page.pagination.total_pages
+page.next_page?
+
+# Templates are addressed by id (UUID)
+client.templates.get_status(page.data.first["id"])
+client.templates.find_by_name("boas_vindas") # local filter over list
+
+# Campaigns (idempotency key is auto-generated when omitted)
 client.campaigns.create(
   {
     "name" => "Reativação Julho",
@@ -54,26 +70,55 @@ Arara::Client.new(
 )
 ```
 
-Requests to `429` and `5xx` are retried with exponential backoff, honoring the `Retry-After` header.
+`GET`, `PUT` and `DELETE`, and any request carrying an `Idempotency-Key`, are retried on `429`, `5xx` and network errors with exponential backoff, honoring `Retry-After`. A `POST`/`PATCH` without `Idempotency-Key` is never retried. `messages.send_message`, `messages.send_batch` and `campaigns.create` always send one (a UUID v4 when you do not pass yours), reused across retries, so a retry never duplicates a send.
 
 ## Resources
 
-`messages`, `templates`, `users`, `organizations`, `api_keys`, `contacts`, `conversations`, `wallet`, `numbers`, `smart_links`, `campaigns`.
+`auth`, `messages`, `templates`, `contacts`, `conversations`, `wallet`, `numbers`, `smart_links`, `campaigns`, `opt_outs`.
 
-## API key scopes
+## API key permissions
 
-`READ` keys perform `GET` only. `SEND` keys add `POST` on `/messages` and `/campaigns`. Everything else requires an `ADMIN` key. Scope is enforced at runtime by the API.
+`READ` keys can `GET` messages, campaigns, templates and numbers. Sending needs `MESSAGES_SEND` (messages) or `CAMPAIGNS_SEND` (campaigns); creating templates needs `TEMPLATES_WRITE`; `contacts` writes need `CONTACTS_WRITE`.
+
+These require an `ADMIN` key: `auth.me`, `contacts` (reads), `conversations`, `wallet` and `opt_outs`. Permissions are enforced by the API.
 
 ## Errors
 
-Every failed request raises an `Arara::Error` (or a subclass): `Arara::AuthenticationError` (401/403), `Arara::RateLimitError` (429), `Arara::NotFoundError` (404), `Arara::BadRequestError` (400), `Arara::ConflictError` (409), `Arara::ServerError` (5xx), `Arara::NetworkError`.
+Every failed request raises an `Arara::Error` (or a subclass) with `status_code`, `code`, `message`, `details` and `retry_after`.
+
+| Status | Class |
+|---|---|
+| 400 | `Arara::BadRequestError` |
+| 401, 403 without `code` (invalid key or missing permission) | `Arara::AuthenticationError` |
+| 402 | `Arara::PaymentRequiredError` |
+| 403 `PLAN_FEATURE_LOCKED` | `Arara::PlanFeatureLockedError` (`feature`, `current_plan`, `upgrade_to`) |
+| 403 with another `code` | `Arara::PermissionError` |
+| 404 | `Arara::NotFoundError` |
+| 409 | `Arara::ConflictError` |
+| 422 | `Arara::UnprocessableEntityError` (e.g. `INVALID_RECIPIENT`, `TEMPLATE_PAUSED`) |
+| 429 | `Arara::RateLimitError` |
+| 5xx | `Arara::ServerError` |
+| network | `Arara::NetworkError` |
 
 ```ruby
 begin
-  client.messages.send(receiver: "5511999998888", template_name: "x")
+  client.messages.send_message(receiver: "5511999998888", template_name: "x")
+rescue Arara::PlanFeatureLockedError => e
+  puts "upgrade to #{e.upgrade_to}"
 rescue Arara::RateLimitError => e
   puts "retry after #{e.retry_after}s"
 rescue Arara::Error => e
   puts "#{e.code}: #{e.message}"
 end
 ```
+
+## Development
+
+```bash
+bundle install
+bundle exec rake test
+```
+
+## License
+
+MIT. See [LICENSE](LICENSE).
