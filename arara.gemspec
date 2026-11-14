@@ -6,9 +6,10 @@ Gem::Specification.new do |spec|
   spec.authors = ["AraraHQ"]
   spec.email = ["dev@ararahq.com"]
 
-  spec.summary = "Official Ruby SDK for the AraraHQ WhatsApp API."
+  spec.summary = "Ruby SDK for the AraraHQ API."
   spec.description = "Ruby client for the AraraHQ API: messages, templates, contacts, " \
-                     "conversations, campaigns, wallet, numbers, smart links and opt-outs. Zero runtime dependencies."
+                     "conversations, campaigns, wallet, numbers, smart links and opt-outs. Zero runtime dependencies. " \
+                     "AraraHQ: WhatsApp for Brazilian companies. Team inbox with AI, campaigns and systems connected through the API."
   spec.homepage = "https://ararahq.com"
   spec.license = "MIT"
   spec.required_ruby_version = ">= 3.0"

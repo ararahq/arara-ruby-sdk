@@ -1,6 +1,10 @@
 # AraraHQ Ruby SDK
 
-Official Ruby client for the [AraraHQ](https://ararahq.com) WhatsApp API. Zero runtime dependencies: pure Ruby stdlib (`net/http`, `json`, `uri`, `time`, `securerandom`). Ruby >= 3.0.
+Official Ruby SDK for the [AraraHQ](https://ararahq.com) API.
+
+AraraHQ: WhatsApp for Brazilian companies. Team inbox with AI, campaigns and systems connected through the API.
+
+Zero runtime dependencies: pure Ruby stdlib (`net/http`, `json`, `uri`, `time`, `securerandom`). Ruby >= 3.0.
 
 ## Install
 
