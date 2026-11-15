@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.1 - 2026-11-15
+
+Descrição do pacote e README alinhados à descrição atual da AraraHQ. Sem mudança de código.
+
 ## 1.0.0 - 2026-09-24
 
 Primeira versão publicada no RubyGems. Alinha o SDK ao contrato da API por chave.
